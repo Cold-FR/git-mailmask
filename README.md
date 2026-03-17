@@ -49,12 +49,26 @@ sudo apt install gh  # Debian/Ubuntu
 
 ---
 
+## Quick Install
+
+### Linux / macOS
+```bash
+curl -sSL https://raw.githubusercontent.com/Cold-FR/git-mailmask/main/git_mailmask.sh -o git_mailmask.sh && chmod +x git_mailmask.sh
+```
+
+### Windows (PowerShell)
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Cold-FR/git-mailmask/main/git_mailmask.ps1" -OutFile "git_mailmask.ps1"
+```
+
+---
+
 ## Installation
 
 Clone or download the scripts, then make the Bash script executable:
 
 ```bash
-git clone https://github.com/Cold-FR/git-mailmask.git
+git clone https://github.com/your-username/git-mailmask.git
 cd git-mailmask
 chmod +x git_mailmask.sh
 ```
