@@ -33,6 +33,8 @@ This is useful when you have accidentally committed with a personal or work emai
 pip install git-filter-repo
 ```
 
+> **Windows users:** Python and pip may not be installed by default. See the [official Python installation guide](https://www.python.org/downloads/windows/) to get started.
+
 ### Optional (recommended)
 - [GitHub CLI (`gh`)](https://cli.github.com/) — enables auto-detection of your GitHub username/email and lets you browse and select repositories directly from your account.
 
