@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # =================================================
-#   Git History Cleaner
+#   Git Mail Mask
 # =================================================
 echo ""
 echo "================================================="
-echo -e "\033[1;37m   Git History Cleaner - Interactive Mode\033[0m"
+echo -e "\033[1;37m   Git Mail Mask - Interactive Mode\033[0m"
 echo "================================================="
 echo ""
 

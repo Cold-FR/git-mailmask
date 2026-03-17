@@ -1,10 +1,10 @@
 ﻿[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 # =================================================
-#   Git History Cleaner
+#   Git Mail Mask
 # =================================================
 Write-Host "`n=================================================" -ForegroundColor Cyan
-Write-Host "   Git History Cleaner - Interactive Mode" -ForegroundColor White
+Write-Host "   Git Mail Mask - Interactive Mode" -ForegroundColor White
 Write-Host "=================================================`n" -ForegroundColor Cyan
 
 # Multi-selection menu (with pagination)
