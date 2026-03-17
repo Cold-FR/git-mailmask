@@ -182,4 +182,4 @@ All commits previously authored or committed with the old emails will be rewritt
 
 ## License
 
-MIT
+MIT © [Cold-FR](https://github.com/Cold-FR)
