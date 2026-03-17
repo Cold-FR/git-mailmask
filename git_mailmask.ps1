@@ -255,7 +255,7 @@ Write-Host ""
 
 # 5. Process filter-repo
 Write-Host "STARTING CLEANUP ($($Repos.Count) repository(ies) selected)..." -ForegroundColor Cyan
-$WorkDir = "git_cleaner_temp"
+$WorkDir = "git_mailmask_temp"
 New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
 Set-Location $WorkDir
 

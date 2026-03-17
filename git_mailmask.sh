@@ -241,7 +241,7 @@ echo ""
 
 # 5. Process filter-repo
 echo -e "\033[1;36mSTARTING CLEANUP (${#REPOS[@]} repository(ies) selected)...\033[0m"
-WORK_DIR="git_cleaner_temp"
+WORK_DIR="git_mailmask_temp"
 mkdir -p "$WORK_DIR" && cd "$WORK_DIR" || exit
 
 MAILMAP_FILE="mailmap.txt"
