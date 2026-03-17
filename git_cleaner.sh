@@ -1,0 +1,281 @@
+#!/bin/bash
+
+# =================================================
+#   Git History Cleaner
+# =================================================
+echo ""
+echo "================================================="
+echo -e "\033[1;37m   Git History Cleaner - Interactive Mode\033[0m"
+echo "================================================="
+echo ""
+
+# Multi-selection menu (with pagination)
+function show_multiselect_menu {
+    local options=("$@")
+    local total=${#options[@]}
+    local cursor=0
+    local page_size=10
+    
+    local selected=()
+    for ((i=0; i<total; i++)); do selected[i]=0; done
+
+    tput civis 
+
+    while true; do
+        local current_page=$(( cursor / page_size + 1 ))
+        local total_pages=$(( (total + page_size - 1) / page_size ))
+        local start_idx=$(( (current_page - 1) * page_size ))
+        local end_idx=$(( start_idx + page_size ))
+
+        echo -e "\033[1;30m   --- Page $current_page / $total_pages --- (Arrows to scroll, Space to select, Enter to validate)\033[0m\033[K"
+
+        for (( i=start_idx; i<end_idx; i++ )); do
+            if [[ $i -lt $total ]]; then
+                local prefix="  "
+                [[ $i -eq $cursor ]] && prefix="\033[1;36m> \033[0m"
+                
+                local checkbox="( )"
+                [[ ${selected[$i]} -eq 1 ]] && checkbox="\033[1;32m(X)\033[0m"
+                
+                echo -e "${prefix}${checkbox} ${options[$i]}\033[K"
+            else
+                # Clear padding
+                echo -e "\033[K"
+            fi
+        done
+
+        IFS= read -rsn1 key
+        if [[ $key == $'\x1b' ]]; then
+            read -rsn2 key2
+            if [[ $key2 == '[A' ]]; then
+                ((cursor--))
+                [[ $cursor -lt 0 ]] && cursor=$((total - 1))
+            elif [[ $key2 == '[B' ]]; then
+                ((cursor++))
+                [[ $cursor -ge $total ]] && cursor=0
+            fi
+        elif [[ "$key" == " " ]]; then
+            if [[ ${selected[$cursor]} -eq 0 ]]; then
+                selected[$cursor]=1
+            else
+                selected[$cursor]=0
+            fi
+        elif [[ -z "$key" ]]; then
+            break
+        fi
+
+        echo -en "\033[$((page_size + 1))A"
+    done
+
+    tput cnorm 
+    
+    SELECTED_REPOS=()
+    for ((i=0; i<total; i++)); do
+        if [[ ${selected[$i]} -eq 1 ]]; then
+            SELECTED_REPOS+=("${options[$i]}")
+        fi
+    done
+}
+
+# Single selection menu
+function show_singleselect_menu {
+    local options=("$@")
+    local total=${#options[@]}
+    local cursor=0
+
+    tput civis 
+
+    while true; do
+        for (( i=0; i<total; i++ )); do
+            if [[ $i -eq $cursor ]]; then
+                echo -e "\033[1;36m> \033[1;32m(X)\033[0m ${options[$i]}\033[K"
+            else
+                echo -e "  ( ) ${options[$i]}\033[K"
+            fi
+        done
+
+        IFS= read -rsn1 key
+        if [[ $key == $'\x1b' ]]; then
+            read -rsn2 key2
+            if [[ $key2 == '[A' ]]; then
+                ((cursor--))
+                [[ $cursor -lt 0 ]] && cursor=$((total - 1))
+            elif [[ $key2 == '[B' ]]; then
+                ((cursor++))
+                [[ $cursor -ge $total ]] && cursor=0
+            fi
+        elif [[ -z "$key" ]]; then
+            SELECTED_INDEX=$cursor
+            break
+        fi
+
+        echo -en "\033[${total}A"
+    done
+
+    tput cnorm 
+}
+
+# 1. Dependencies
+if ! command -v git-filter-repo &> /dev/null; then
+    echo -e "\033[1;31m[Error] git-filter-repo not found. Run: pip install git-filter-repo\033[0m"
+    exit 1
+fi
+
+# 2. Identity
+echo -e "\033[1;33mNEW IDENTITY :\033[0m"
+DEFAULT_NAME=""
+DEFAULT_EMAIL=""
+
+if command -v gh &> /dev/null; then
+    tmp_login=$(mktemp)
+    tmp_id=$(mktemp)
+    
+    # Async fetch
+    (
+        gh api user -q '.login' > "$tmp_login" 2>/dev/null
+        gh api user -q '.id' > "$tmp_id" 2>/dev/null
+    ) &
+    pid=$!
+    
+    frames=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
+    tput civis
+    
+    # Loader
+    while kill -0 $pid 2>/dev/null; do
+        for frame in "${frames[@]}"; do
+            if ! kill -0 $pid 2>/dev/null; then break; fi
+            echo -en "\r\033[1;36m$frame\033[0m Fetching GitHub profile..."
+            sleep 0.1
+        done
+    done
+    
+    echo -en "\r\033[K"
+    tput cnorm
+    
+    DEFAULT_NAME=$(cat "$tmp_login")
+    DEFAULT_ID=$(cat "$tmp_id")
+    rm -f "$tmp_login" "$tmp_id"
+    
+    if [[ -n "$DEFAULT_NAME" && -n "$DEFAULT_ID" ]]; then
+        DEFAULT_EMAIL="${DEFAULT_ID}+${DEFAULT_NAME}@users.noreply.github.com"
+    fi
+fi
+
+if [[ -n "$DEFAULT_NAME" ]]; then
+    read -p "- GitHub Username [Enter for: $DEFAULT_NAME] : " CORRECT_NAME
+    CORRECT_NAME=${CORRECT_NAME:-$DEFAULT_NAME}
+    
+    read -p "- GitHub Email [Enter for: $DEFAULT_EMAIL] : " CORRECT_EMAIL
+    CORRECT_EMAIL=${CORRECT_EMAIL:-$DEFAULT_EMAIL}
+else
+    read -p "- GitHub Username (ex: Cold-FR) : " CORRECT_NAME
+    read -p "- GitHub Email (ex: noreply@github.com) : " CORRECT_EMAIL
+fi
+echo ""
+
+# 3. Emails to replace
+echo -e "\033[1;33mOLD EMAILS TO REPLACE :\033[0m"
+echo -e "\033[1;30m   (Leave empty and press Enter to finish)\033[0m"
+OLD_EMAILS=()
+while true; do
+    read -p "   > " OLD_EMAIL
+    if [[ -z "$OLD_EMAIL" ]]; then
+        break
+    fi
+    OLD_EMAILS+=("$OLD_EMAIL")
+done
+
+if [[ ${#OLD_EMAILS[@]} -eq 0 ]]; then
+    echo -e "\033[1;31m[Error] No email provided.\033[0m"
+    exit 1
+fi
+echo ""
+
+# 4. Source selection
+echo -e "\033[1;33mREPOSITORY SOURCE :\033[0m"
+echo -e "\033[1;30m   (Arrows to choose, Enter to validate)\033[0m"
+
+SOURCE_OPTIONS=(
+    "Enter a repository URL manually"
+    "Connect to GitHub and select from my repositories"
+)
+
+show_singleselect_menu "${SOURCE_OPTIONS[@]}"
+echo ""
+
+REPOS=()
+if [[ "$SELECTED_INDEX" == "0" ]]; then
+    read -p "Enter the repository URL : " SINGLE_REPO
+    if [[ -z "$SINGLE_REPO" ]]; then
+        echo -e "\033[1;31m[Cancelled] Empty URL.\033[0m"
+        exit 1
+    fi
+    REPOS+=("$SINGLE_REPO")
+elif [[ "$SELECTED_INDEX" == "1" ]]; then
+    
+    if ! command -v gh &> /dev/null; then
+        echo -e "\033[1;31m[Error] GitHub CLI (gh) not found.\033[0m"
+        exit 1
+    fi
+    
+    echo -e "\033[1;36mConnecting to GitHub and fetching repositories...\033[0m"
+    mapfile -t ALL_GITHUB_REPOS < <(gh repo list --limit 100 --json url --jq '.[].url')
+    
+    if [[ ${#ALL_GITHUB_REPOS[@]} -eq 0 ]]; then
+        echo -e "\033[1;31m[Error] No repository found.\033[0m"
+        exit 1
+    fi
+
+    echo -e "\n\033[1;33mSELECT REPOSITORIES TO CLEAN :\033[0m"
+    
+    show_multiselect_menu "${ALL_GITHUB_REPOS[@]}"
+    
+    REPOS=("${SELECTED_REPOS[@]}")
+    
+    if [[ ${#REPOS[@]} -eq 0 ]]; then
+        echo -e "\033[1;31m[Cancelled] No repository selected.\033[0m"
+        exit 1
+    fi
+fi
+echo ""
+
+# 5. Process filter-repo
+echo -e "\033[1;36mSTARTING CLEANUP (${#REPOS[@]} repository(ies) selected)...\033[0m"
+WORK_DIR="git_cleaner_temp"
+mkdir -p "$WORK_DIR" && cd "$WORK_DIR" || exit
+
+MAILMAP_FILE="mailmap.txt"
+> "$MAILMAP_FILE"
+for old_email in "${OLD_EMAILS[@]}"; do
+    echo "$CORRECT_NAME <$CORRECT_EMAIL> <$old_email>" >> "$MAILMAP_FILE"
+done
+
+for REPO_URL in "${REPOS[@]}"; do
+    echo "-------------------------------------------------"
+    echo -e "\033[1;33mProcessing : $REPO_URL\033[0m"
+
+    git clone "$REPO_URL"
+    FOLDER_NAME=$(basename "$REPO_URL" .git)
+    cd "$FOLDER_NAME" || continue
+
+    # Check branches
+    for remote in $(git branch -r | grep -v '\->'); do 
+        git branch --track "${remote#origin/}" "$remote" 2>/dev/null || true
+    done
+
+    # Apply mailmap
+    git filter-repo --mailmap "../$MAILMAP_FILE" --force
+
+    git remote add origin "$REPO_URL"
+    git push --force --tags origin 'refs/heads/*'
+    
+    cd ..
+done
+
+# 6. Cleanup
+cd .. && rm -rf "$WORK_DIR"
+
+echo ""
+echo "================================================="
+echo -e "\033[1;32mOPERATION COMPLETED SUCCESSFULLY !\033[0m"
+echo "================================================="
