@@ -198,12 +198,15 @@ echo -e "\033[1;30m   (Arrows to choose, Enter to validate)\033[0m"
 SOURCE_OPTIONS=(
     "Enter a repository URL manually"
     "Connect to GitHub and select from my repositories"
+    "Select a local repository directory on this computer"
 )
 
 show_singleselect_menu "${SOURCE_OPTIONS[@]}"
 echo ""
 
 REPOS=()
+IS_LOCAL=0
+
 if [[ "$SELECTED_INDEX" == "0" ]]; then
     read -p "Enter the repository URL : " SINGLE_REPO
     if [[ -z "$SINGLE_REPO" ]]; then
@@ -236,44 +239,86 @@ elif [[ "$SELECTED_INDEX" == "1" ]]; then
         echo -e "\033[1;31m[Cancelled] No repository selected.\033[0m"
         exit 1
     fi
+elif [[ "$SELECTED_INDEX" == "2" ]]; then
+    read -p "Enter the absolute path to your local repository : " SINGLE_REPO
+    if [[ -z "$SINGLE_REPO" || ! -d "$SINGLE_REPO" ]]; then
+        echo -e "\033[1;31m[Cancelled] Invalid path.\033[0m"
+        exit 1
+    fi
+    REPOS+=("$SINGLE_REPO")
+    IS_LOCAL=1
 fi
 echo ""
 
 # 5. Process filter-repo
 echo -e "\033[1;36mSTARTING CLEANUP (${#REPOS[@]} repository(ies) selected)...\033[0m"
+ORIGINAL_DIR=$(pwd)
 WORK_DIR="git_mailmask_temp"
-mkdir -p "$WORK_DIR" && cd "$WORK_DIR" || exit
+mkdir -p "$WORK_DIR"
 
-MAILMAP_FILE="mailmap.txt"
-> "$MAILMAP_FILE"
+# We use absolute path for mailmap since we will CD into repositories
+MAILMAP_FILE="$ORIGINAL_DIR/$WORK_DIR/mailmap.txt"
+: > "$MAILMAP_FILE"
 for old_email in "${OLD_EMAILS[@]}"; do
     echo "$CORRECT_NAME <$CORRECT_EMAIL> <$old_email>" >> "$MAILMAP_FILE"
 done
 
-for REPO_URL in "${REPOS[@]}"; do
+for REPO in "${REPOS[@]}"; do
     echo "-------------------------------------------------"
-    echo -e "\033[1;33mProcessing : $REPO_URL\033[0m"
 
-    git clone "$REPO_URL"
-    FOLDER_NAME=$(basename "$REPO_URL" .git)
-    cd "$FOLDER_NAME" || continue
+    if [[ $IS_LOCAL -eq 1 ]]; then
+        echo -e "\033[1;33mProcessing local repository : $REPO\033[0m"
+        cd "$REPO" || continue
+        if [[ ! -d ".git" ]]; then
+            echo -e "\033[1;31m[Error] Not a git repository. Skipping.\033[0m"
+            cd "$ORIGINAL_DIR" || exit
+            continue
+        fi
+    else
+        echo -e "\033[1;33mProcessing remote repository : $REPO\033[0m"
+        cd "$ORIGINAL_DIR" || exit
+        cd "$WORK_DIR" || continue
 
-    # Check branches
-    for remote in $(git branch -r | grep -v '\->'); do 
-        git branch --track "${remote#origin/}" "$remote" 2>/dev/null || true
-    done
+        git clone "$REPO"
+        FOLDER_NAME=$(basename "$REPO" .git)
+        cd "$FOLDER_NAME" || continue
+
+        # Check branches
+        for remote in $(git branch -r | grep -v '\->'); do
+            git branch --track "${remote#origin/}" "$remote" 2>/dev/null || true
+        done
+    fi
+
+    # Backup origin URL because filter-repo deletes remotes
+    ORIGIN_URL=$(git remote get-url origin 2>/dev/null)
 
     # Apply mailmap
-    git filter-repo --mailmap "../$MAILMAP_FILE" --force
+    git filter-repo --mailmap "$MAILMAP_FILE" --force
 
-    git remote add origin "$REPO_URL"
-    git push --force --tags origin 'refs/heads/*'
-    
-    cd ..
+    # Restore origin
+    if [[ -n "$ORIGIN_URL" ]]; then
+        git remote add origin "$ORIGIN_URL"
+    elif [[ $IS_LOCAL -eq 0 ]]; then
+        git remote add origin "$REPO"
+    fi
+
+    # Dry-Run / Push Confirmation
+    echo -e "\n\033[1;32mHistory successfully rewritten locally!\033[0m"
+    read -p "Do you want to force push to the remote? [Y/n] " PUSH_CONFIRM
+
+    if [[ "$PUSH_CONFIRM" =~ ^[Nn]$ ]]; then
+        echo -e "\033[1;30mSkipping push for this repository.\033[0m"
+    else
+        # Tries to push to origin, fallbacks to default push
+        git push --force --tags origin 'refs/heads/*' 2>/dev/null || git push --force --tags
+    fi
+
+    cd "$ORIGINAL_DIR" || exit
 done
 
 # 6. Cleanup
-cd .. && rm -rf "$WORK_DIR"
+cd "$ORIGINAL_DIR" || exit
+rm -rf "$WORK_DIR"
 
 echo ""
 echo "================================================="

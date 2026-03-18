@@ -221,13 +221,16 @@ Write-Host "   (Arrows to choose, Enter to validate)" -ForegroundColor DarkGray
 
 $SourceOptions = @(
     "Enter a repository URL manually",
-    "Connect to GitHub and select from my repositories"
+    "Connect to GitHub and select from my repositories",
+    "Select a local repository directory on this computer"
 )
 
 $RepoChoiceIndex = Show-SingleSelectMenu -Options $SourceOptions
 Write-Host ""
 
 $Repos = @()
+$IsLocal = $false
+
 if ($RepoChoiceIndex -eq 0) {
     $SingleRepo = Read-Host "Enter the repository URL"
     if ([string]::IsNullOrWhiteSpace($SingleRepo)) { Write-Host "[Cancelled] Empty URL." -ForegroundColor Red; exit }
@@ -250,49 +253,91 @@ if ($RepoChoiceIndex -eq 0) {
     $Repos = Show-MultiSelectMenu -Options $AllGithubRepos
     
     if ($Repos.Count -eq 0) { Write-Host "[Cancelled] No repository selected." -ForegroundColor Red; exit }
+} elseif ($RepoChoiceIndex -eq 2) {
+    $SingleRepo = Read-Host "Enter the absolute path to your local repository"
+    if ([string]::IsNullOrWhiteSpace($SingleRepo) -or -not (Test-Path $SingleRepo)) {
+        Write-Host "[Cancelled] Invalid path." -ForegroundColor Red; exit
+    }
+    $Repos += $SingleRepo
+    $IsLocal = $true
 }
 Write-Host ""
 
 # 5. Process filter-repo
 Write-Host "STARTING CLEANUP ($($Repos.Count) repository(ies) selected)..." -ForegroundColor Cyan
+$OriginalDir = Get-Location
 $WorkDir = "git_mailmask_temp"
 New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
-Set-Location $WorkDir
 
-$MailmapFile = "mailmap.txt"
+# We use absolute path for mailmap since we will CD into repositories
+$MailmapFile = Join-Path $OriginalDir "$WorkDir\mailmap.txt"
 $MailmapContent = @()
 foreach ($Old in $OldEmails) {
     $MailmapContent += "$CorrectName <$CorrectEmail> <$Old>"
 }
 Set-Content -Path $MailmapFile -Value $MailmapContent -Encoding UTF8
 
-foreach ($RepoUrl in $Repos) {
+foreach ($Repo in $Repos) {
     Write-Host "-------------------------------------------------"
-    Write-Host "Processing : $RepoUrl" -ForegroundColor Yellow
 
-    git clone $RepoUrl
-    $FolderName = ($RepoUrl -split "/")[-1] -replace "\.git$",""
-    Set-Location $FolderName
+    if ($IsLocal) {
+        Write-Host "Processing local repository : $Repo" -ForegroundColor Yellow
+        Set-Location $Repo
+        if (-not (Test-Path ".git")) {
+            Write-Host "[Error] Not a git repository. Skipping." -ForegroundColor Red
+            Set-Location $OriginalDir
+            continue
+        }
+    } else {
+        Write-Host "Processing remote repository : $Repo" -ForegroundColor Yellow
+        Set-Location $OriginalDir
+        Set-Location $WorkDir
 
-    # Check branches
-    $Branches = git branch -r | Where-Object { $_ -notmatch "->" }
-    foreach ($Branch in $Branches) {
-        $BranchName = $Branch.Trim()
-        $LocalBranch = $BranchName -replace "^origin/", ""
-        git branch --track $LocalBranch $BranchName 2>$null
+        git clone $Repo
+        $FolderName = ($Repo -split "/")[-1] -replace "\.git$",""
+        Set-Location $FolderName
+
+        # Check branches
+        $Branches = git branch -r | Where-Object { $_ -notmatch "->" }
+        foreach ($Branch in $Branches) {
+            $BranchName = $Branch.Trim()
+            $LocalBranch = $BranchName -replace "^origin/", ""
+            git branch --track $LocalBranch $BranchName 2>$null
+        }
     }
 
-    # Apply mailmap
-    git filter-repo --mailmap "..\$MailmapFile" --force
+    # Backup origin URL because filter-repo deletes remotes
+    $OriginUrl = git remote get-url origin 2>$null
 
-    git remote add origin $RepoUrl
-    git push --force --tags origin "refs/heads/*" 
-    
-    Set-Location ..
+    # Apply mailmap
+    git filter-repo --mailmap $MailmapFile --force
+
+    # Restore origin
+    if ($OriginUrl) {
+        git remote add origin $OriginUrl
+    } elseif (-not $IsLocal) {
+        git remote add origin $Repo
+    }
+
+    # Dry-Run / Push Confirmation
+    Write-Host "`nHistory successfully rewritten locally!" -ForegroundColor Green
+    $PushConfirm = Read-Host "Do you want to force push to the remote? [Y/n]"
+
+    if ($PushConfirm -notmatch "^[nN]") {
+        # Tries to push to origin, fallbacks to default push
+        git push --force --tags origin "refs/heads/*" 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            git push --force --tags 2>$null
+        }
+    } else {
+        Write-Host "Skipping push for this repository." -ForegroundColor DarkGray
+    }
+
+    Set-Location $OriginalDir
 }
 
 # 6. Cleanup
-Set-Location ..
+Set-Location $OriginalDir
 Remove-Item -Recurse -Force -Path $WorkDir
 
 Write-Host "`n=================================================" -ForegroundColor Cyan
