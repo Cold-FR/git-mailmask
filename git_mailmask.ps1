@@ -402,17 +402,18 @@ foreach ($Repo in $Repos) {
     Write-Host "`nHistory successfully rewritten locally!" -ForegroundColor Green
 
     if ($AutoPush) {
-        Write-Host "Auto-push flag detected. Pushing to remote..." -ForegroundColor Cyan
-        git push --force --tags origin "refs/heads/*" 2>$null
+        Write-Host "Auto-push flag detected. Pushing to remote...`n" -ForegroundColor Cyan
+        git push --force --tags origin "refs/heads/*"
         if ($LASTEXITCODE -ne 0) {
-            git push --force --tags 2>$null
+            git push --force --tags
         }
     } else {
         $PushConfirm = Read-Host "Do you want to force push to the remote? [Y/n]"
         if ($PushConfirm -notmatch "^[nN]") {
-            git push --force --tags origin "refs/heads/*" 2>$null
+            Write-Host ""
+            git push --force --tags origin "refs/heads/*"
             if ($LASTEXITCODE -ne 0) {
-                git push --force --tags 2>$null
+                git push --force --tags
             }
         } else {
             Write-Host "Skipping push for this repository." -ForegroundColor DarkGray

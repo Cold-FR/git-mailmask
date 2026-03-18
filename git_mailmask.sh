@@ -368,14 +368,15 @@ for REPO in "${REPOS[@]}"; do
     echo -e "\n\033[1;32mHistory successfully rewritten locally!\033[0m"
 
     if [[ $AUTO_PUSH -eq 1 ]]; then
-        echo -e "\033[1;36mAuto-push flag detected. Pushing to remote...\033[0m"
-        git push --force --tags origin 'refs/heads/*' 2>/dev/null || git push --force --tags
+        echo -e "\033[1;36mAuto-push flag detected. Pushing to remote...\n\033[0m"
+        git push --force --tags origin 'refs/heads/*' || git push --force --tags
     else
         read -r -p "Do you want to force push to the remote? [Y/n] " PUSH_CONFIRM
         if [[ "$PUSH_CONFIRM" =~ ^[Nn]$ ]]; then
             echo -e "\033[1;30mSkipping push for this repository.\033[0m"
         else
-            git push --force --tags origin 'refs/heads/*' 2>/dev/null || git push --force --tags
+            echo ""
+            git push --force --tags origin 'refs/heads/*' || git push --force --tags
         fi
     fi
 
