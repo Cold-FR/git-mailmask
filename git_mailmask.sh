@@ -207,22 +207,25 @@ echo -e "\033[1;30m   (Leave empty and press Enter to finish)\033[0m"
 OLD_EMAILS=()
 
 while true; do
-    read -r -p "   > " OLD_EMAIL
-    if [[ -z "$OLD_EMAIL" ]]; then
-        break
-    fi
+    while true; do
+        read -r -p "   > " OLD_EMAIL
+        if [[ -z "$OLD_EMAIL" ]]; then
+            break
+        fi
 
-    if [[ "$OLD_EMAIL" =~ $EMAIL_REGEX ]]; then
-        OLD_EMAILS+=("$OLD_EMAIL")
+        if [[ "$OLD_EMAIL" =~ $EMAIL_REGEX ]]; then
+            OLD_EMAILS+=("$OLD_EMAIL")
+        else
+            echo -e "   \033[1;31m[Error] Invalid email format.\033[0m"
+        fi
+    done
+
+    if [[ ${#OLD_EMAILS[@]} -gt 0 ]]; then
+        break
     else
-        echo -e "   \033[1;31m[Error] Invalid email format.\033[0m"
+        echo -e "   \033[1;31m[Error] You must provide at least one email to replace. Please try again.\033[0m"
     fi
 done
-
-if [[ ${#OLD_EMAILS[@]} -eq 0 ]]; then
-    echo -e "\033[1;31m[Error] No email provided.\033[0m"
-    exit 1
-fi
 echo ""
 
 # 4. Source selection
@@ -237,70 +240,76 @@ SOURCE_OPTIONS=(
     "Enter the path to a local repository manually"
 )
 
-show_singleselect_menu "${SOURCE_OPTIONS[@]}"
-echo ""
-
 REPOS=()
 IS_LOCAL=0
 
-if [[ "$SELECTED_INDEX" == "0" ]]; then
-    read -r -p "Enter the repository URL : " SINGLE_REPO
-    if [[ -z "$SINGLE_REPO" ]]; then
-        echo -e "\033[1;31m[Cancelled] Empty URL.\033[0m"
-        exit 1
+while true; do
+    show_singleselect_menu "${SOURCE_OPTIONS[@]}"
+    echo ""
+
+    if [[ "$SELECTED_INDEX" == "0" ]]; then
+        read -r -p "Enter the repository URL : " SINGLE_REPO
+        if [[ -z "$SINGLE_REPO" ]]; then
+            echo -e "  \033[1;31m[Error] Empty URL. Please try again.\n\033[0m"
+            continue
+        fi
+        REPOS+=("$SINGLE_REPO")
+    elif [[ "$SELECTED_INDEX" == "1" ]]; then
+
+        if ! command -v gh &> /dev/null; then
+            echo -e "  \033[1;31m[Error] GitHub CLI (gh) not found. Please select another option.\n\033[0m"
+            continue
+        fi
+
+        echo -e "\033[1;36mConnecting to GitHub and fetching repositories...\033[0m"
+        mapfile -t ALL_GITHUB_REPOS < <(gh repo list --limit 100 --json url --jq '.[].url')
+
+        if [[ ${#ALL_GITHUB_REPOS[@]} -eq 0 ]]; then
+            echo -e "  \033[1;31m[Error] No repository found. Please select another option.\n\033[0m"
+            continue
+        fi
+
+        echo -e "\n\033[1;33mSELECT REPOSITORIES TO CLEAN :\033[0m"
+
+        show_multiselect_menu "${ALL_GITHUB_REPOS[@]}"
+
+        REPOS+=("${SELECTED_REPOS[@]}")
+
+        if [[ ${#REPOS[@]} -eq 0 ]]; then
+            echo -e "  \033[1;31m[Error] No repository selected. Please try again.\n\033[0m"
+            continue
+        fi
+    elif [[ "$SELECTED_INDEX" == "2" ]]; then
+        if [[ ! -d ".git" ]]; then
+            echo -e "  \033[1;31m[Error] Current directory is not a git repository. Please select another option.\n\033[0m"
+            continue
+        fi
+        REPOS+=("$CURRENT_DIR_PATH")
+        IS_LOCAL=1
+    elif [[ "$SELECTED_INDEX" == "3" ]]; then
+        read -r -p "Enter the path to your local repository : " SINGLE_REPO
+
+        # Clean quotes if user drag & dropped a folder
+        SINGLE_REPO="${SINGLE_REPO%\"}"
+        SINGLE_REPO="${SINGLE_REPO#\"}"
+        SINGLE_REPO="${SINGLE_REPO%\'}"
+        SINGLE_REPO="${SINGLE_REPO#\'}"
+
+        if [[ -z "$SINGLE_REPO" || ! -d "$SINGLE_REPO" ]]; then
+            echo -e "  \033[1;31m[Error] Invalid path. Please try again.\n\033[0m"
+            continue
+        fi
+
+        # Resolve to absolute path securely
+        RESOLVED_PATH=$(cd "$SINGLE_REPO" && pwd)
+        REPOS+=("$RESOLVED_PATH")
+        IS_LOCAL=1
     fi
-    REPOS+=("$SINGLE_REPO")
-elif [[ "$SELECTED_INDEX" == "1" ]]; then
 
-    if ! command -v gh &> /dev/null; then
-        echo -e "\033[1;31m[Error] GitHub CLI (gh) not found.\033[0m"
-        exit 1
+    if [[ ${#REPOS[@]} -gt 0 ]]; then
+        break
     fi
-
-    echo -e "\033[1;36mConnecting to GitHub and fetching repositories...\033[0m"
-    mapfile -t ALL_GITHUB_REPOS < <(gh repo list --limit 100 --json url --jq '.[].url')
-
-    if [[ ${#ALL_GITHUB_REPOS[@]} -eq 0 ]]; then
-        echo -e "\033[1;31m[Error] No repository found.\033[0m"
-        exit 1
-    fi
-
-    echo -e "\n\033[1;33mSELECT REPOSITORIES TO CLEAN :\033[0m"
-
-    show_multiselect_menu "${ALL_GITHUB_REPOS[@]}"
-
-    REPOS=("${SELECTED_REPOS[@]}")
-
-    if [[ ${#REPOS[@]} -eq 0 ]]; then
-        echo -e "\033[1;31m[Cancelled] No repository selected.\033[0m"
-        exit 1
-    fi
-elif [[ "$SELECTED_INDEX" == "2" ]]; then
-    if [[ ! -d ".git" ]]; then
-        echo -e "\033[1;31m[Error] Current directory is not a git repository.\033[0m"
-        exit 1
-    fi
-    REPOS+=("$CURRENT_DIR_PATH")
-    IS_LOCAL=1
-elif [[ "$SELECTED_INDEX" == "3" ]]; then
-    read -r -p "Enter the path to your local repository : " SINGLE_REPO
-
-    # Clean quotes if user drag & dropped a folder
-    SINGLE_REPO="${SINGLE_REPO%\"}"
-    SINGLE_REPO="${SINGLE_REPO#\"}"
-    SINGLE_REPO="${SINGLE_REPO%\'}"
-    SINGLE_REPO="${SINGLE_REPO#\'}"
-
-    if [[ -z "$SINGLE_REPO" || ! -d "$SINGLE_REPO" ]]; then
-        echo -e "\033[1;31m[Cancelled] Invalid path.\033[0m"
-        exit 1
-    fi
-
-    # Resolve to absolute path securely
-    RESOLVED_PATH=$(cd "$SINGLE_REPO" && pwd)
-    REPOS+=("$RESOLVED_PATH")
-    IS_LOCAL=1
-fi
+done
 echo ""
 
 # 5. Process filter-repo

@@ -244,17 +244,23 @@ Write-Host "   (Leave empty and press Enter to finish)" -ForegroundColor DarkGra
 $OldEmails = @()
 
 while ($true) {
-    $OldEmail = Read-Host "   >"
-    if ([string]::IsNullOrWhiteSpace($OldEmail)) { break }
+    while ($true) {
+        $OldEmail = Read-Host "   >"
+        if ([string]::IsNullOrWhiteSpace($OldEmail)) { break }
 
-    if ($OldEmail -match $EmailRegex) {
-        $OldEmails += $OldEmail
+        if ($OldEmail -match $EmailRegex) {
+            $OldEmails += $OldEmail
+        } else {
+            Write-Host "   [Error] Invalid email format." -ForegroundColor Red
+        }
+    }
+
+    if ($OldEmails.Count -gt 0) {
+        break
     } else {
-        Write-Host "   [Error] Invalid email format." -ForegroundColor Red
+        Write-Host "   [Error] You must provide at least one email to replace. Please try again." -ForegroundColor Red
     }
 }
-
-if ($OldEmails.Count -eq 0) { Write-Host "[Error] No email provided." -ForegroundColor Red; exit }
 Write-Host ""
 
 # 4. Source selection
@@ -269,54 +275,68 @@ $SourceOptions = @(
     "Enter the path to a local repository manually"
 )
 
-$RepoChoiceIndex = Show-SingleSelectMenu -Options $SourceOptions
-Write-Host ""
-
 $Repos = @()
 $IsLocal = $false
 
-if ($RepoChoiceIndex -eq 0) {
-    $SingleRepo = Read-Host "Enter the repository URL"
-    if ([string]::IsNullOrWhiteSpace($SingleRepo)) { Write-Host "[Cancelled] Empty URL." -ForegroundColor Red; exit }
-    $Repos += $SingleRepo
-} elseif ($RepoChoiceIndex -eq 1) {
-    if (-not (Get-Command "gh" -ErrorAction SilentlyContinue)) {
-        Write-Host "[Error] GitHub CLI (gh) not found." -ForegroundColor Red
-        exit
-    }
-    
-    Write-Host "Connecting to GitHub and fetching repositories..." -ForegroundColor Cyan
-    $AllGithubRepos = @(gh repo list --limit 100 --json url --jq ".[].url")
-    
-    if ($AllGithubRepos.Count -eq 0) {
-        Write-Host "[Error] No repository found." -ForegroundColor Red; exit
+while ($true) {
+    $RepoChoiceIndex = Show-SingleSelectMenu -Options $SourceOptions
+    Write-Host ""
+
+    if ($RepoChoiceIndex -eq 0) {
+        $SingleRepo = Read-Host "Enter the repository URL"
+        if ([string]::IsNullOrWhiteSpace($SingleRepo)) {
+            Write-Host "  [Error] Empty URL. Please try again.`n" -ForegroundColor Red
+            continue
+        }
+        $Repos += $SingleRepo
+    } elseif ($RepoChoiceIndex -eq 1) {
+        if (-not (Get-Command "gh" -ErrorAction SilentlyContinue)) {
+            Write-Host "  [Error] GitHub CLI (gh) not found. Please select another option.`n" -ForegroundColor Red
+            continue
+        }
+
+        Write-Host "Connecting to GitHub and fetching repositories..." -ForegroundColor Cyan
+        $AllGithubRepos = @(gh repo list --limit 100 --json url --jq ".[].url")
+
+        if ($AllGithubRepos.Count -eq 0) {
+            Write-Host "  [Error] No repository found. Please select another option.`n" -ForegroundColor Red
+            continue
+        }
+
+        Write-Host "`nSELECT REPOSITORIES TO CLEAN :" -ForegroundColor Yellow
+        $SelectedFromMenu = Show-MultiSelectMenu -Options $AllGithubRepos
+        $Repos += $SelectedFromMenu
+
+        if ($Repos.Count -eq 0) {
+            Write-Host "  [Error] No repository selected. Please try again.`n" -ForegroundColor Red
+            continue
+        }
+    } elseif ($RepoChoiceIndex -eq 2) {
+        if (-not (Test-Path ".git")) {
+            Write-Host "  [Error] Current directory is not a git repository. Please select another option.`n" -ForegroundColor Red
+            continue
+        }
+        $Repos += $CurrentDirPath
+        $IsLocal = $true
+    } elseif ($RepoChoiceIndex -eq 3) {
+        $SingleRepo = Read-Host "Enter the path to your local repository"
+        # Clean quotes if user drag & dropped a folder
+        $SingleRepo = $SingleRepo -replace '^"|"$', '' -replace "^'|'$", ''
+
+        if ([string]::IsNullOrWhiteSpace($SingleRepo) -or -not (Test-Path $SingleRepo)) {
+            Write-Host "  [Error] Invalid path. Please try again.`n" -ForegroundColor Red
+            continue
+        }
+
+        # Resolve to absolute path
+        $ResolvedPath = (Resolve-Path $SingleRepo).Path
+        $Repos += $ResolvedPath
+        $IsLocal = $true
     }
 
-    Write-Host "`nSELECT REPOSITORIES TO CLEAN :" -ForegroundColor Yellow
-    
-    $Repos = Show-MultiSelectMenu -Options $AllGithubRepos
-    
-    if ($Repos.Count -eq 0) { Write-Host "[Cancelled] No repository selected." -ForegroundColor Red; exit }
-} elseif ($RepoChoiceIndex -eq 2) {
-    if (-not (Test-Path ".git")) {
-        Write-Host "[Error] Current directory is not a git repository." -ForegroundColor Red
-        exit
+    if ($Repos.Count -gt 0) {
+        break
     }
-    $Repos += $CurrentDirPath
-    $IsLocal = $true
-} elseif ($RepoChoiceIndex -eq 3) {
-    $SingleRepo = Read-Host "Enter the path to your local repository"
-    # Clean quotes if user drag & dropped a folder
-    $SingleRepo = $SingleRepo -replace '^"|"$', '' -replace "^'|'$", ''
-
-    if ([string]::IsNullOrWhiteSpace($SingleRepo) -or -not (Test-Path $SingleRepo)) {
-        Write-Host "[Cancelled] Invalid path." -ForegroundColor Red; exit
-    }
-
-    # Resolve to absolute path
-    $ResolvedPath = (Resolve-Path $SingleRepo).Path
-    $Repos += $ResolvedPath
-    $IsLocal = $true
 }
 Write-Host ""
 
