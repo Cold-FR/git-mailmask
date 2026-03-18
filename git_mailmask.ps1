@@ -1,7 +1,9 @@
-﻿param(
-    [switch]$AutoPush
-)
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+﻿[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+$AutoPush = $false
+if ($args -contains "--auto-push" -or $args -contains "-AutoPush") {
+    $AutoPush = $true
+}
 
 # =================================================
 #   Git Mail Mask
