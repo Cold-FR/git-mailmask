@@ -33,7 +33,7 @@ This is useful when you have accidentally committed with a personal or work emai
 pip install git-filter-repo
 ```
 
-> **Windows users:** Python and pip may not be installed by default. See the [official Python installation guide](https://www.python.org/downloads/windows/) to get started.
+> **Windows users:** Python and pip may not be installed by default. See the [official Python installation guide](https://docs.python.org/3/using/windows.html) to get started.
 
 ### Optional (recommended)
 - [GitHub CLI (`gh`)](https://cli.github.com/) — enables auto-detection of your GitHub username/email and lets you browse and select repositories directly from your account.
@@ -173,6 +173,31 @@ This file is passed to `git filter-repo --mailmap`, which rewrites every matchin
 - **Collaborators will need to re-clone or rebase** their local copies after a force-push.
 - You must have **push access** (with force-push allowed) to the target repository.
 - For organization repositories, confirm that force-push is not blocked by branch protection rules.
+
+---
+
+## Resetting a Local Repository After Cleanup
+
+Once git-mailmask has force-pushed rewritten history, any existing local clone will be out of sync. To realign it without re-cloning from scratch:
+
+```bash
+git fetch origin
+git reset --hard origin/main  # replace 'main' with your branch name
+```
+
+If you have multiple branches to reset:
+
+```bash
+git fetch --all
+git reset --hard origin/$(git rev-parse --abbrev-ref HEAD)
+```
+
+> **Warning:** `git reset --hard` discards all local uncommitted changes. If you have work in progress, you can stash it first:
+> ```bash
+> git stash
+> # then after the reset:
+> git stash pop
+> ```
 
 ---
 
