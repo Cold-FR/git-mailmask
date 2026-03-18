@@ -178,6 +178,7 @@ if (-not (Get-Command "git-filter-repo" -ErrorAction SilentlyContinue)) {
 Write-Host "NEW IDENTITY :" -ForegroundColor Yellow
 $DefaultName = ""
 $DefaultEmail = ""
+$EmailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
 
 if (Get-Command "gh" -ErrorAction SilentlyContinue) {
     # Fetch gh api async
@@ -218,12 +219,22 @@ if (Get-Command "gh" -ErrorAction SilentlyContinue) {
 if (-not [string]::IsNullOrWhiteSpace($DefaultName)) {
     $CorrectName = Read-Host "- GitHub Username [Enter for: $DefaultName]"
     if ([string]::IsNullOrWhiteSpace($CorrectName)) { $CorrectName = $DefaultName }
-    
-    $CorrectEmail = Read-Host "- GitHub Email [Enter for: $DefaultEmail]"
-    if ([string]::IsNullOrWhiteSpace($CorrectEmail)) { $CorrectEmail = $DefaultEmail }
+
+    while ($true) {
+        $CorrectEmail = Read-Host "- GitHub Email [Enter for: $DefaultEmail]"
+        if ([string]::IsNullOrWhiteSpace($CorrectEmail)) { $CorrectEmail = $DefaultEmail }
+
+        if ($CorrectEmail -match $EmailRegex) { break }
+        Write-Host "  [Error] Invalid email format. Please try again." -ForegroundColor Red
+    }
 } else {
     $CorrectName = Read-Host "- GitHub Username (ex: Cold-FR)"
-    $CorrectEmail = Read-Host "- GitHub Email (ex: noreply@github.com)"
+
+    while ($true) {
+        $CorrectEmail = Read-Host "- GitHub Email (ex: noreply@github.com)"
+        if ($CorrectEmail -match $EmailRegex) { break }
+        Write-Host "  [Error] Invalid email format. Please try again." -ForegroundColor Red
+    }
 }
 Write-Host ""
 
@@ -231,11 +242,18 @@ Write-Host ""
 Write-Host "OLD EMAILS TO REPLACE :" -ForegroundColor Yellow
 Write-Host "   (Leave empty and press Enter to finish)" -ForegroundColor DarkGray
 $OldEmails = @()
+
 while ($true) {
     $OldEmail = Read-Host "   >"
     if ([string]::IsNullOrWhiteSpace($OldEmail)) { break }
-    $OldEmails += $OldEmail
+
+    if ($OldEmail -match $EmailRegex) {
+        $OldEmails += $OldEmail
+    } else {
+        Write-Host "   [Error] Invalid email format." -ForegroundColor Red
+    }
 }
+
 if ($OldEmails.Count -eq 0) { Write-Host "[Error] No email provided." -ForegroundColor Red; exit }
 Write-Host ""
 

@@ -136,6 +136,7 @@ fi
 echo -e "\033[1;33mNEW IDENTITY :\033[0m"
 DEFAULT_NAME=""
 DEFAULT_EMAIL=""
+EMAIL_REGEX="^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
 
 if command -v gh &> /dev/null; then
     tmp_login=$(mktemp)
@@ -176,11 +177,27 @@ if [[ -n "$DEFAULT_NAME" ]]; then
     read -p "- GitHub Username [Enter for: $DEFAULT_NAME] : " CORRECT_NAME
     CORRECT_NAME=${CORRECT_NAME:-$DEFAULT_NAME}
 
-    read -p "- GitHub Email [Enter for: $DEFAULT_EMAIL] : " CORRECT_EMAIL
-    CORRECT_EMAIL=${CORRECT_EMAIL:-$DEFAULT_EMAIL}
+    while true; do
+        read -p "- GitHub Email [Enter for: $DEFAULT_EMAIL] : " CORRECT_EMAIL
+        CORRECT_EMAIL=${CORRECT_EMAIL:-$DEFAULT_EMAIL}
+
+        if [[ "$CORRECT_EMAIL" =~ $EMAIL_REGEX ]]; then
+            break
+        else
+            echo -e "  \033[1;31m[Error] Invalid email format. Please try again.\033[0m"
+        fi
+    done
 else
     read -p "- GitHub Username (ex: Cold-FR) : " CORRECT_NAME
-    read -p "- GitHub Email (ex: noreply@github.com) : " CORRECT_EMAIL
+
+    while true; do
+        read -p "- GitHub Email (ex: noreply@github.com) : " CORRECT_EMAIL
+        if [[ "$CORRECT_EMAIL" =~ $EMAIL_REGEX ]]; then
+            break
+        else
+            echo -e "  \033[1;31m[Error] Invalid email format. Please try again.\033[0m"
+        fi
+    done
 fi
 echo ""
 
@@ -188,12 +205,18 @@ echo ""
 echo -e "\033[1;33mOLD EMAILS TO REPLACE :\033[0m"
 echo -e "\033[1;30m   (Leave empty and press Enter to finish)\033[0m"
 OLD_EMAILS=()
+
 while true; do
     read -p "   > " OLD_EMAIL
     if [[ -z "$OLD_EMAIL" ]]; then
         break
     fi
-    OLD_EMAILS+=("$OLD_EMAIL")
+
+    if [[ "$OLD_EMAIL" =~ $EMAIL_REGEX ]]; then
+        OLD_EMAILS+=("$OLD_EMAIL")
+    else
+        echo -e "   \033[1;31m[Error] Invalid email format.\033[0m"
+    fi
 done
 
 if [[ ${#OLD_EMAILS[@]} -eq 0 ]]; then
