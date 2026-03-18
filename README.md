@@ -22,6 +22,8 @@ This is useful when you have accidentally committed with a personal or work emai
 - ✅ **Interactive menus** — arrow keys, space to select, enter to confirm
 - 📄 Paginated multi-select for large repository lists
 - 🖥️ Cross-platform: Bash (Linux/macOS) and PowerShell (Windows)
+- 📁 Supports **local repositories** — work on an already-cloned repo or the current directory
+- 🚀 `--auto-push` flag to skip the push confirmation prompt
 
 ---
 
@@ -87,10 +89,22 @@ chmod +x git_mailmask.sh
 ./git_mailmask.sh
 ```
 
+To skip the push confirmation at the end:
+
+```bash
+./git_mailmask.sh --auto-push
+```
+
 ### Windows
 
 ```powershell
 .\git_mailmask.ps1
+```
+
+To skip the push confirmation at the end:
+
+```powershell
+.\git_mailmask.ps1 --auto-push
 ```
 
 > **Note for Windows users:** If the script is blocked after download, unblock it first:
@@ -133,21 +147,31 @@ OLD EMAILS TO REPLACE :
 Choose how to provide the target repositories:
 
 ```
-  (X) Enter a repository URL manually
+  (X) Enter a remote repository URL manually
   ( ) Connect to GitHub and select from my repositories
+  ( ) Process the current directory (/your/current/path)
+  ( ) Enter the path to a local repository manually
 ```
 
-- **Manual URL** — paste a single HTTPS or SSH repository URL.
+- **Remote URL** — paste a single HTTPS or SSH repository URL. The script clones it, rewrites history, and force-pushes back.
 - **GitHub repositories** — requires the GitHub CLI. Fetches all your repos and displays a paginated multi-select menu. Use arrow keys to navigate, **Space** to toggle selection, and **Enter** to confirm.
+- **Current directory** — runs directly on the repo in your working directory, no clone needed.
+- **Local path** — enter or drag-and-drop a path to any local git repository. Quotes are stripped automatically.
 
-### 4. Cleanup
+### 4. Cleanup & Push
 
 The tool will:
-1. Clone the repository(ies) into a temporary folder
+1. Clone the repository into a temporary folder (remote mode) or work in place (local mode)
 2. Track all remote branches locally
 3. Apply the mailmap rewrite via `git filter-repo`
-4. Force-push all branches back to the remote
-5. Delete the temporary working directory
+4. Restore the remote origin (removed by `git filter-repo`)
+5. Ask whether to force-push — or push automatically if `--auto-push` was passed
+6. Delete the temporary working directory
+
+```
+History successfully rewritten locally!
+Do you want to force push to the remote? [Y/n]
+```
 
 ```
 =================================================
