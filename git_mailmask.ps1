@@ -1,4 +1,7 @@
-﻿[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+﻿param(
+    [switch]$AutoPush
+)
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 # =================================================
 #   Git Mail Mask
@@ -219,10 +222,12 @@ Write-Host ""
 Write-Host "REPOSITORY SOURCE :" -ForegroundColor Yellow
 Write-Host "   (Arrows to choose, Enter to validate)" -ForegroundColor DarkGray
 
+$CurrentDirPath = (Get-Location).Path
 $SourceOptions = @(
-    "Enter a repository URL manually",
+    "Enter a remote repository URL manually",
     "Connect to GitHub and select from my repositories",
-    "Select a local repository directory on this computer"
+    "Process the current directory ($CurrentDirPath)",
+    "Enter the path to a local repository manually"
 )
 
 $RepoChoiceIndex = Show-SingleSelectMenu -Options $SourceOptions
@@ -254,11 +259,24 @@ if ($RepoChoiceIndex -eq 0) {
     
     if ($Repos.Count -eq 0) { Write-Host "[Cancelled] No repository selected." -ForegroundColor Red; exit }
 } elseif ($RepoChoiceIndex -eq 2) {
-    $SingleRepo = Read-Host "Enter the absolute path to your local repository"
+    if (-not (Test-Path ".git")) {
+        Write-Host "[Error] Current directory is not a git repository." -ForegroundColor Red
+        exit
+    }
+    $Repos += $CurrentDirPath
+    $IsLocal = $true
+} elseif ($RepoChoiceIndex -eq 3) {
+    $SingleRepo = Read-Host "Enter the path to your local repository"
+    # Clean quotes if user drag & dropped a folder
+    $SingleRepo = $SingleRepo -replace '^"|"$', '' -replace "^'|'$", ''
+
     if ([string]::IsNullOrWhiteSpace($SingleRepo) -or -not (Test-Path $SingleRepo)) {
         Write-Host "[Cancelled] Invalid path." -ForegroundColor Red; exit
     }
-    $Repos += $SingleRepo
+
+    # Resolve to absolute path
+    $ResolvedPath = (Resolve-Path $SingleRepo).Path
+    $Repos += $ResolvedPath
     $IsLocal = $true
 }
 Write-Host ""
@@ -319,18 +337,25 @@ foreach ($Repo in $Repos) {
         git remote add origin $Repo
     }
 
-    # Dry-Run / Push Confirmation
+    # Push Execution
     Write-Host "`nHistory successfully rewritten locally!" -ForegroundColor Green
-    $PushConfirm = Read-Host "Do you want to force push to the remote? [Y/n]"
 
-    if ($PushConfirm -notmatch "^[nN]") {
-        # Tries to push to origin, fallbacks to default push
+    if ($AutoPush) {
+        Write-Host "Auto-push flag detected. Pushing to remote..." -ForegroundColor Cyan
         git push --force --tags origin "refs/heads/*" 2>$null
         if ($LASTEXITCODE -ne 0) {
             git push --force --tags 2>$null
         }
     } else {
-        Write-Host "Skipping push for this repository." -ForegroundColor DarkGray
+        $PushConfirm = Read-Host "Do you want to force push to the remote? [Y/n]"
+        if ($PushConfirm -notmatch "^[nN]") {
+            git push --force --tags origin "refs/heads/*" 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                git push --force --tags 2>$null
+            }
+        } else {
+            Write-Host "Skipping push for this repository." -ForegroundColor DarkGray
+        }
     }
 
     Set-Location $OriginalDir

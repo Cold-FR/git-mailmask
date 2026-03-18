@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Parse arguments
+AUTO_PUSH=0
+if [[ "$1" == "--auto-push" ]]; then
+    AUTO_PUSH=1
+fi
+
 # =================================================
 #   Git Mail Mask
 # =================================================
@@ -15,11 +21,11 @@ function show_multiselect_menu {
     local total=${#options[@]}
     local cursor=0
     local page_size=10
-    
+
     local selected=()
     for ((i=0; i<total; i++)); do selected[i]=0; done
 
-    tput civis 
+    tput civis
 
     while true; do
         local current_page=$(( cursor / page_size + 1 ))
@@ -33,10 +39,10 @@ function show_multiselect_menu {
             if [[ $i -lt $total ]]; then
                 local prefix="  "
                 [[ $i -eq $cursor ]] && prefix="\033[1;36m> \033[0m"
-                
+
                 local checkbox="( )"
                 [[ ${selected[$i]} -eq 1 ]] && checkbox="\033[1;32m(X)\033[0m"
-                
+
                 echo -e "${prefix}${checkbox} ${options[$i]}\033[K"
             else
                 # Clear padding
@@ -67,8 +73,8 @@ function show_multiselect_menu {
         echo -en "\033[$((page_size + 1))A"
     done
 
-    tput cnorm 
-    
+    tput cnorm
+
     SELECTED_REPOS=()
     for ((i=0; i<total; i++)); do
         if [[ ${selected[$i]} -eq 1 ]]; then
@@ -83,7 +89,7 @@ function show_singleselect_menu {
     local total=${#options[@]}
     local cursor=0
 
-    tput civis 
+    tput civis
 
     while true; do
         for (( i=0; i<total; i++ )); do
@@ -112,7 +118,7 @@ function show_singleselect_menu {
         echo -en "\033[${total}A"
     done
 
-    tput cnorm 
+    tput cnorm
 }
 
 # 1. Dependencies
@@ -129,17 +135,17 @@ DEFAULT_EMAIL=""
 if command -v gh &> /dev/null; then
     tmp_login=$(mktemp)
     tmp_id=$(mktemp)
-    
+
     # Async fetch
     (
         gh api user -q '.login' > "$tmp_login" 2>/dev/null
         gh api user -q '.id' > "$tmp_id" 2>/dev/null
     ) &
     pid=$!
-    
+
     frames=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
     tput civis
-    
+
     # Loader
     while kill -0 $pid 2>/dev/null; do
         for frame in "${frames[@]}"; do
@@ -148,14 +154,14 @@ if command -v gh &> /dev/null; then
             sleep 0.1
         done
     done
-    
+
     echo -en "\r\033[K"
     tput cnorm
-    
+
     DEFAULT_NAME=$(cat "$tmp_login")
     DEFAULT_ID=$(cat "$tmp_id")
     rm -f "$tmp_login" "$tmp_id"
-    
+
     if [[ -n "$DEFAULT_NAME" && -n "$DEFAULT_ID" ]]; then
         DEFAULT_EMAIL="${DEFAULT_ID}+${DEFAULT_NAME}@users.noreply.github.com"
     fi
@@ -164,7 +170,7 @@ fi
 if [[ -n "$DEFAULT_NAME" ]]; then
     read -p "- GitHub Username [Enter for: $DEFAULT_NAME] : " CORRECT_NAME
     CORRECT_NAME=${CORRECT_NAME:-$DEFAULT_NAME}
-    
+
     read -p "- GitHub Email [Enter for: $DEFAULT_EMAIL] : " CORRECT_EMAIL
     CORRECT_EMAIL=${CORRECT_EMAIL:-$DEFAULT_EMAIL}
 else
@@ -195,10 +201,12 @@ echo ""
 echo -e "\033[1;33mREPOSITORY SOURCE :\033[0m"
 echo -e "\033[1;30m   (Arrows to choose, Enter to validate)\033[0m"
 
+CURRENT_DIR_PATH=$(pwd)
 SOURCE_OPTIONS=(
-    "Enter a repository URL manually"
+    "Enter a remote repository URL manually"
     "Connect to GitHub and select from my repositories"
-    "Select a local repository directory on this computer"
+    "Process the current directory ($CURRENT_DIR_PATH)"
+    "Enter the path to a local repository manually"
 )
 
 show_singleselect_menu "${SOURCE_OPTIONS[@]}"
@@ -215,37 +223,54 @@ if [[ "$SELECTED_INDEX" == "0" ]]; then
     fi
     REPOS+=("$SINGLE_REPO")
 elif [[ "$SELECTED_INDEX" == "1" ]]; then
-    
+
     if ! command -v gh &> /dev/null; then
         echo -e "\033[1;31m[Error] GitHub CLI (gh) not found.\033[0m"
         exit 1
     fi
-    
+
     echo -e "\033[1;36mConnecting to GitHub and fetching repositories...\033[0m"
     mapfile -t ALL_GITHUB_REPOS < <(gh repo list --limit 100 --json url --jq '.[].url')
-    
+
     if [[ ${#ALL_GITHUB_REPOS[@]} -eq 0 ]]; then
         echo -e "\033[1;31m[Error] No repository found.\033[0m"
         exit 1
     fi
 
     echo -e "\n\033[1;33mSELECT REPOSITORIES TO CLEAN :\033[0m"
-    
+
     show_multiselect_menu "${ALL_GITHUB_REPOS[@]}"
-    
+
     REPOS=("${SELECTED_REPOS[@]}")
-    
+
     if [[ ${#REPOS[@]} -eq 0 ]]; then
         echo -e "\033[1;31m[Cancelled] No repository selected.\033[0m"
         exit 1
     fi
 elif [[ "$SELECTED_INDEX" == "2" ]]; then
-    read -p "Enter the absolute path to your local repository : " SINGLE_REPO
+    if [[ ! -d ".git" ]]; then
+        echo -e "\033[1;31m[Error] Current directory is not a git repository.\033[0m"
+        exit 1
+    fi
+    REPOS+=("$CURRENT_DIR_PATH")
+    IS_LOCAL=1
+elif [[ "$SELECTED_INDEX" == "3" ]]; then
+    read -p "Enter the path to your local repository : " SINGLE_REPO
+
+    # Clean quotes if user drag & dropped a folder
+    SINGLE_REPO="${SINGLE_REPO%\"}"
+    SINGLE_REPO="${SINGLE_REPO#\"}"
+    SINGLE_REPO="${SINGLE_REPO%\'}"
+    SINGLE_REPO="${SINGLE_REPO#\'}"
+
     if [[ -z "$SINGLE_REPO" || ! -d "$SINGLE_REPO" ]]; then
         echo -e "\033[1;31m[Cancelled] Invalid path.\033[0m"
         exit 1
     fi
-    REPOS+=("$SINGLE_REPO")
+
+    # Resolve to absolute path securely
+    RESOLVED_PATH=$(cd "$SINGLE_REPO" && pwd)
+    REPOS+=("$RESOLVED_PATH")
     IS_LOCAL=1
 fi
 echo ""
@@ -302,15 +327,19 @@ for REPO in "${REPOS[@]}"; do
         git remote add origin "$REPO"
     fi
 
-    # Dry-Run / Push Confirmation
+    # Push Execution
     echo -e "\n\033[1;32mHistory successfully rewritten locally!\033[0m"
-    read -p "Do you want to force push to the remote? [Y/n] " PUSH_CONFIRM
 
-    if [[ "$PUSH_CONFIRM" =~ ^[Nn]$ ]]; then
-        echo -e "\033[1;30mSkipping push for this repository.\033[0m"
-    else
-        # Tries to push to origin, fallbacks to default push
+    if [[ $AUTO_PUSH -eq 1 ]]; then
+        echo -e "\033[1;36mAuto-push flag detected. Pushing to remote...\033[0m"
         git push --force --tags origin 'refs/heads/*' 2>/dev/null || git push --force --tags
+    else
+        read -p "Do you want to force push to the remote? [Y/n] " PUSH_CONFIRM
+        if [[ "$PUSH_CONFIRM" =~ ^[Nn]$ ]]; then
+            echo -e "\033[1;30mSkipping push for this repository.\033[0m"
+        else
+            git push --force --tags origin 'refs/heads/*' 2>/dev/null || git push --force --tags
+        fi
     fi
 
     cd "$ORIGINAL_DIR" || exit
