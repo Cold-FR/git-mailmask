@@ -25,65 +25,75 @@ function Show-MultiSelectMenu {
     $MenuTop = [Console]::CursorTop - ($PageSize + 3)
 
     [Console]::CursorVisible = $false
+    [Console]::TreatControlCAsInput = $true
     $NeedsRedraw = $true
 
-    while ($true) {
-        if ($NeedsRedraw) {
-            [Console]::SetCursorPosition(0, $MenuTop)
-            
-            $StartIdx = [math]::Floor($Cursor / $PageSize) * $PageSize
-            $CurrentPage = [math]::Floor($Cursor / $PageSize) + 1
-            $TotalPages = [math]::Ceiling($Options.Length / $PageSize)
-            
-            Write-Host "   --- Page $CurrentPage / $TotalPages --- (Arrows to scroll, Space to select, Enter to validate)" -ForegroundColor DarkGray
-            
-            $PadLen = [Math]::Max(0, [Console]::WindowWidth - 6)
+    try {
+        while ($true) {
+            if ($NeedsRedraw) {
+                [Console]::SetCursorPosition(0, $MenuTop)
 
-            for ($i = $StartIdx; $i -lt ($StartIdx + $PageSize); $i++) {
-                if ($i -lt $Options.Length) {
-                    if ($i -eq $Cursor) { 
-                        Write-Host "> " -NoNewline -ForegroundColor Cyan 
-                    } else { 
-                        Write-Host "  " -NoNewline 
+                $StartIdx = [math]::Floor($Cursor / $PageSize) * $PageSize
+                $CurrentPage = [math]::Floor($Cursor / $PageSize) + 1
+                $TotalPages = [math]::Ceiling($Options.Length / $PageSize)
+
+                Write-Host "   --- Page $CurrentPage / $TotalPages --- (Arrows to scroll, Space to select, Enter to validate)" -ForegroundColor DarkGray
+
+                $PadLen = [Math]::Max(0, [Console]::WindowWidth - 6)
+
+                for ($i = $StartIdx; $i -lt ($StartIdx + $PageSize); $i++) {
+                    if ($i -lt $Options.Length) {
+                        if ($i -eq $Cursor) {
+                            Write-Host "> " -NoNewline -ForegroundColor Cyan
+                        } else {
+                            Write-Host "  " -NoNewline
+                        }
+
+                        if ($Selected[$i]) {
+                            Write-Host "(X) " -NoNewline -ForegroundColor Green
+                        } else {
+                            Write-Host "( ) " -NoNewline
+                        }
+
+                        $Text = $Options[$i]
+                        if ($Text.Length -gt $PadLen -and $PadLen -gt 0) { $Text = $Text.Substring(0, $PadLen) }
+                        Write-Host $Text.PadRight($PadLen)
+                    } else {
+                        Write-Host "".PadRight($PadLen + 6)
                     }
-                    
-                    if ($Selected[$i]) { 
-                        Write-Host "(X) " -NoNewline -ForegroundColor Green 
-                    } else { 
-                        Write-Host "( ) " -NoNewline 
-                    }
-                    
-                    $Text = $Options[$i]
-                    if ($Text.Length -gt $PadLen -and $PadLen -gt 0) { $Text = $Text.Substring(0, $PadLen) }
-                    Write-Host $Text.PadRight($PadLen)
-                } else {
-                    # Clear padding
-                    Write-Host "".PadRight($PadLen + 6)
                 }
+                $NeedsRedraw = $false
             }
-            $NeedsRedraw = $false
-        }
 
-        $KeyInfo = [Console]::ReadKey($true)
-        $Key = $KeyInfo.Key
+            $KeyInfo = [Console]::ReadKey($true)
+            $Key = $KeyInfo.Key
 
-        if ($Key -eq "UpArrow") {
-            $Cursor--
-            if ($Cursor -lt 0) { $Cursor = $Options.Length - 1 }
-            $NeedsRedraw = $true
-        } elseif ($Key -eq "DownArrow") {
-            $Cursor++
-            if ($Cursor -ge $Options.Length) { $Cursor = 0 }
-            $NeedsRedraw = $true
-        } elseif ($Key -eq "Spacebar") {
-            $Selected[$Cursor] = -not $Selected[$Cursor]
-            $NeedsRedraw = $true
-        } elseif ($Key -eq "Enter") {
-            break
+            if ($KeyInfo.Modifiers -match "Control" -and $Key -eq "C") {
+                [Console]::SetCursorPosition(0, $MenuTop + $PageSize + 2)
+                Write-Host "`n[Cancelled] Exited by user." -ForegroundColor Red
+                exit
+            }
+
+            if ($Key -eq "UpArrow") {
+                $Cursor--
+                if ($Cursor -lt 0) { $Cursor = $Options.Length - 1 }
+                $NeedsRedraw = $true
+            } elseif ($Key -eq "DownArrow") {
+                $Cursor++
+                if ($Cursor -ge $Options.Length) { $Cursor = 0 }
+                $NeedsRedraw = $true
+            } elseif ($Key -eq "Spacebar") {
+                $Selected[$Cursor] = -not $Selected[$Cursor]
+                $NeedsRedraw = $true
+            } elseif ($Key -eq "Enter") {
+                break
+            }
         }
+    } finally {
+        [Console]::TreatControlCAsInput = $false
+        [Console]::CursorVisible = $true
     }
 
-    [Console]::CursorVisible = $true
     [Console]::SetCursorPosition(0, $MenuTop + $PageSize + 2)
 
     $Result = @()
@@ -105,43 +115,54 @@ function Show-SingleSelectMenu {
     $MenuTop = [Console]::CursorTop - $Options.Length
 
     [Console]::CursorVisible = $false
+    [Console]::TreatControlCAsInput = $true
     $NeedsRedraw = $true
 
-    while ($true) {
-        if ($NeedsRedraw) {
-            [Console]::SetCursorPosition(0, $MenuTop)
-            
-            for ($i = 0; $i -lt $Options.Length; $i++) {
-                if ($i -eq $Cursor) { 
-                    Write-Host "> " -NoNewline -ForegroundColor Cyan 
-                    Write-Host "(X) " -NoNewline -ForegroundColor Green 
-                } else { 
-                    Write-Host "  " -NoNewline 
-                    Write-Host "( ) " -NoNewline 
+    try {
+        while ($true) {
+            if ($NeedsRedraw) {
+                [Console]::SetCursorPosition(0, $MenuTop)
+
+                for ($i = 0; $i -lt $Options.Length; $i++) {
+                    if ($i -eq $Cursor) {
+                        Write-Host "> " -NoNewline -ForegroundColor Cyan
+                        Write-Host "(X) " -NoNewline -ForegroundColor Green
+                    } else {
+                        Write-Host "  " -NoNewline
+                        Write-Host "( ) " -NoNewline
+                    }
+
+                    Write-Host $Options[$i]
                 }
-                
-                Write-Host $Options[$i]
+                $NeedsRedraw = $false
             }
-            $NeedsRedraw = $false
-        }
 
-        $KeyInfo = [Console]::ReadKey($true)
-        $Key = $KeyInfo.Key
+            $KeyInfo = [Console]::ReadKey($true)
+            $Key = $KeyInfo.Key
 
-        if ($Key -eq "UpArrow") {
-            $Cursor--
-            if ($Cursor -lt 0) { $Cursor = $Options.Length - 1 }
-            $NeedsRedraw = $true
-        } elseif ($Key -eq "DownArrow") {
-            $Cursor++
-            if ($Cursor -ge $Options.Length) { $Cursor = 0 }
-            $NeedsRedraw = $true
-        } elseif ($Key -eq "Enter") {
-            break
+            if ($KeyInfo.Modifiers -match "Control" -and $Key -eq "C") {
+                [Console]::SetCursorPosition(0, $MenuTop + $Options.Length)
+                Write-Host "`n[Cancelled] Exited by user." -ForegroundColor Red
+                exit
+            }
+
+            if ($Key -eq "UpArrow") {
+                $Cursor--
+                if ($Cursor -lt 0) { $Cursor = $Options.Length - 1 }
+                $NeedsRedraw = $true
+            } elseif ($Key -eq "DownArrow") {
+                $Cursor++
+                if ($Cursor -ge $Options.Length) { $Cursor = 0 }
+                $NeedsRedraw = $true
+            } elseif ($Key -eq "Enter") {
+                break
+            }
         }
+    } finally {
+        [Console]::TreatControlCAsInput = $false
+        [Console]::CursorVisible = $true
     }
 
-    [Console]::CursorVisible = $true
     [Console]::SetCursorPosition(0, $MenuTop + $Options.Length)
     
     return $Cursor
