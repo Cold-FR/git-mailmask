@@ -174,11 +174,11 @@ if command -v gh &> /dev/null; then
 fi
 
 if [[ -n "$DEFAULT_NAME" ]]; then
-    read -p "- GitHub Username [Enter for: $DEFAULT_NAME] : " CORRECT_NAME
+    read -r -p "- GitHub Username [Enter for: $DEFAULT_NAME] : " CORRECT_NAME
     CORRECT_NAME=${CORRECT_NAME:-$DEFAULT_NAME}
 
     while true; do
-        read -p "- GitHub Email [Enter for: $DEFAULT_EMAIL] : " CORRECT_EMAIL
+        read -r -p "- GitHub Email [Enter for: $DEFAULT_EMAIL] : " CORRECT_EMAIL
         CORRECT_EMAIL=${CORRECT_EMAIL:-$DEFAULT_EMAIL}
 
         if [[ "$CORRECT_EMAIL" =~ $EMAIL_REGEX ]]; then
@@ -188,10 +188,10 @@ if [[ -n "$DEFAULT_NAME" ]]; then
         fi
     done
 else
-    read -p "- GitHub Username (ex: Cold-FR) : " CORRECT_NAME
+    read -r -p "- GitHub Username (ex: Cold-FR) : " CORRECT_NAME
 
     while true; do
-        read -p "- GitHub Email (ex: noreply@github.com) : " CORRECT_EMAIL
+        read -r -p "- GitHub Email (ex: noreply@github.com) : " CORRECT_EMAIL
         if [[ "$CORRECT_EMAIL" =~ $EMAIL_REGEX ]]; then
             break
         else
@@ -207,7 +207,7 @@ echo -e "\033[1;30m   (Leave empty and press Enter to finish)\033[0m"
 OLD_EMAILS=()
 
 while true; do
-    read -p "   > " OLD_EMAIL
+    read -r -p "   > " OLD_EMAIL
     if [[ -z "$OLD_EMAIL" ]]; then
         break
     fi
@@ -244,7 +244,7 @@ REPOS=()
 IS_LOCAL=0
 
 if [[ "$SELECTED_INDEX" == "0" ]]; then
-    read -p "Enter the repository URL : " SINGLE_REPO
+    read -r -p "Enter the repository URL : " SINGLE_REPO
     if [[ -z "$SINGLE_REPO" ]]; then
         echo -e "\033[1;31m[Cancelled] Empty URL.\033[0m"
         exit 1
@@ -283,7 +283,7 @@ elif [[ "$SELECTED_INDEX" == "2" ]]; then
     REPOS+=("$CURRENT_DIR_PATH")
     IS_LOCAL=1
 elif [[ "$SELECTED_INDEX" == "3" ]]; then
-    read -p "Enter the path to your local repository : " SINGLE_REPO
+    read -r -p "Enter the path to your local repository : " SINGLE_REPO
 
     # Clean quotes if user drag & dropped a folder
     SINGLE_REPO="${SINGLE_REPO%\"}"
@@ -362,7 +362,7 @@ for REPO in "${REPOS[@]}"; do
         echo -e "\033[1;36mAuto-push flag detected. Pushing to remote...\033[0m"
         git push --force --tags origin 'refs/heads/*' 2>/dev/null || git push --force --tags
     else
-        read -p "Do you want to force push to the remote? [Y/n] " PUSH_CONFIRM
+        read -r -p "Do you want to force push to the remote? [Y/n] " PUSH_CONFIRM
         if [[ "$PUSH_CONFIRM" =~ ^[Nn]$ ]]; then
             echo -e "\033[1;30mSkipping push for this repository.\033[0m"
         else
