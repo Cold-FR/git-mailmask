@@ -12,6 +12,8 @@ This is useful when you have accidentally committed with a personal or work emai
 
 ---
 
+![Demo of git-mailmask in action, showing the interactive prompts and repository selection](https://i.imgur.com/cnwYp5Q.gif)
+
 ## Features
 
 - 🔁 Rewrites full Git history across **all branches**
